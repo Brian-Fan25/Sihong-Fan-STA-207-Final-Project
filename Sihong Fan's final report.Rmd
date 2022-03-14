@@ -1,0 +1,499 @@
+---
+title: "Sihong Fan's Final Report"
+date: "03/13/2022"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    toc_collapsed: true
+    toc_depth: 3
+    number_sections: true
+---
+
+```{r global_options, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+library(dplyr)
+library(tidyverse)
+library(readxl)
+library(ggplot2)
+library(gridExtra)
+library(MASS)
+library(kableExtra)
+library(gtsummary)
+```
+
+# Abstract
+
+In this project, we consider exploring the CDC COVID-19 data set by mainly using two way anova model to figure out what two factors contribute most to the infection rate and death rate. We treat death rate and infection rate as two dependent variables, and vaccination and age group as two independent variables. Then we conduct descriptive analysis by providing summary statistics, histogram and box-plot. Furthermore, we fit two way anova model for both death rate and infection rate and conduct model diagnostics of both anova models, while we can't hold for two assumptions. After conducting the Box-cox transformation, we need to apply log transformation to our original data set. Then we conduct descriptive and inferential analysis of log-transformed data set, and finally our both new anova models are able to hold model assumptions. In a nutshell, we can conclude that age group and vaccination type are two main factors that affect death rate and infection rate.
+
+***
+
+# Background
+
+***
+
+## Introduce the dataset and the questions of interest. 
+
+Our group will explore the CDC COVID-19 data in this project. The original data comes rom [CDC](https://data.cdc.gov/Public-Health-Surveillance/Rates-of-COVID-19-Cases-or-Deaths-by-Age-Group-and/3rge-nu2a/data). This data set is maintained by CDC and updated constantly.The reason we use this data set is that it has more clear variable such as vaccine and death rate, which help us conduct exploratory analysis in a more direct way.
+
+This data set consists of 12 variables, which are unvaccinated_population, unvaccinated_with_outcome,fully_unvaccinated_population,vaccinated_with_outcome, mmwr_week, month, outcome, continuity_correction, age_adj_vax_ir, crude_unvax_ir, vaccine_product, and age_group. 
+
+    1. Unvaccinated_population stands for cumulative weekly estimated count of the unvaccinated population.
+    2. Unvaccinated_with_outcome stands for weekly count of unvaccinated individuals with the corresponding outcome.
+    3. Fully_unvaccinated_population stands for cumulative weekly count of the fully vaccinated population.
+    4. Vaccinated_with_outcome stands for weekly count of vaccinated individuals with the corresponding outcome.
+    5. mmwr_week stands for MMWR epidemiological year and week [YYYYWW format].
+    6. Month stands for calendar month corresponding to MMWR week value with 12 months.
+    7. Outcome stands for the result of COVID-19 Case (Death or not).
+    8. Continuity_correction stands for the flag for whether continuity correction was applied for one or more jurisdictions in the strata [1 = Yes, 0 = No].
+    9. age_adj_vax_ir stands for age-standardized incidence rate of the corresponding outcome among the vaccinated population (per 100,000 population).
+    10. crude_unvax_ir stands for unadjusted incidence rate of the corresponding outcome among the unvaccinated population (per 100,000 population).
+    11. vaccine_product stands for FDA-authorized COVID-19 vaccine product name(Janssen, Moderna, Pfizer and all_types).
+    12. age_group stands for 7 different age group.
+    
+In this project, I am interested in figuring out what affects infection rate and death rate most of COVID-19. I will consider vaccination and age as two main features. After COVID-19 being severe and out of control, the infection rate and death rate are incredibly high. But after the three different vaccines come out, the infection rate and death rate drop a lot and people feel more relaxed after getting vaccinated. Another key factor is age. Among those first thousands of COVID-19 death cases, elder people (> 65) weighed a lot. People may think that it is reasonable because elder people have weak body and immune system, which causes them can't defend a serious virus. But in this project, we want to prove this conclusion by using two way anova model.
+    
+***
+
+## Review the background of the coronavirus pandemic. 
+
+Since the end of 2019, COVID-19 appears and becomes one of the most terrifying virus across the world and even in human beings' history. Till Feb 2022, COVID-19 makes over 5.86 millions of people lose their lives. More importantly, it affects people's daily life in different aspects and perhaps it will last much longer than expected. From the March to September in 2020, people are not allowed to go into shopping mall, restaurants, campus, entertainment facilities, which leads to a severe consequence that plenty of restaurants or shops shut down and most people lost their jobs. Students have to attend their school remotely, which makes them have no choice but to fit in a new way to study. 
+
+In the second half of 2021, everything seems to be better and in the 2021 fall quarter, most schools allow students to be back school. While in the end of 2021, Omicron variation appears and it spreads more easily and speedy than the original COVID-19 virus and Delta variation. The every day new cases number make a new record. At the beginning of February 2022, new case rate and death rate reduce a lot and I hope COVID-19 can be over as soon as possible because it totally changes everyone' life style and leads to so much inconvenience.Till today, people have to wear masks every day when they want to go to place with crowded people such as shopping mall or college campus. Everything has gradually become expensive especially gas and daily costs, which makes people feel more stressed. 
+
+***
+
+# Exploratory analysis of original data
+
+***
+
+## Descriptive analysis
+
+In this project, we treat death rate and infection rate as two dependent variables, and vaccination and age group as two independent variables. Since the death rate is quite low, we would be better to multiply 1000 of both death rate and infection rate.
+
+At first we need to calculate the death rate and infection rate.
+
+```{r,echo=FALSE}
+covid <- read_excel("weekly.xlsx")
+
+# Death rate
+death <- read_excel("weekly.xlsx",sheet="death_vaccine")
+death$age_group <- as.factor(death$age_group)
+death <- data.frame(death,death_age = death$age_group)
+
+death_un <- death[,c("unvaccinated_population", "unvaccinated_with_outcome", "death_age")]
+death_rate <- (1000* death_un$unvaccinated_with_outcome) / (death_un$unvaccinated_population)
+death_un <- data.frame(death_un,vaccination.type = "not_vaccinated", death_rate)
+
+death_fu <- death[,c("fully_vaccinated_population", "vaccinated_with_outcome", "death_age")]
+death_rate <- (1000* death_fu$vaccinated_with_outcome) / (death_fu$fully_vaccinated_population)
+death_fu <- data.frame(death_fu,vaccination.type = "vaccinated", death_rate)
+
+death_total <- rbind(death_un[,c("death_age","vaccination.type","death_rate")],death_fu[,c("death_age","vaccination.type","death_rate")])
+
+#infection rate
+vaccine <- read_excel("weekly.xlsx",sheet="case_vaccine")
+vaccine$age_group <- as.factor(vaccine$age_group)
+vaccine <- data.frame(vaccine,vaccine_age = vaccine$age_group)
+
+vaccine_un <- vaccine[,c("unvaccinated_population", "unvaccinated_with_outcome", "vaccine_age")]
+infection_rate <- (1000* vaccine_un$unvaccinated_with_outcome) / (vaccine_un$unvaccinated_population)
+vaccine_un <- data.frame(vaccine_un, vaccination.type = "not_vaccinated", infection_rate)
+
+vaccine_fu <- vaccine[,c("fully_vaccinated_population", "vaccinated_with_outcome", "vaccine_age")]
+infection_rate <- (1000* vaccine_fu$vaccinated_with_outcome) / (vaccine_fu$fully_vaccinated_population)
+vaccine_fu <- data.frame(vaccine_fu, vaccination.type = "vaccinated", infection_rate)
+
+infection_total <- rbind(vaccine_un[,c("vaccine_age","vaccination.type","infection_rate")],vaccine_fu[,c("vaccine_age","vaccination.type","infection_rate")])
+
+```
+
+***
+
+### Summary statistics of original data
+```{r,echo=FALSE}
+# death rate
+s_d <- summarize(group_by(death_total,vaccination.type,death_age),mean(death_rate))
+s_d %>% 
+  kbl(caption = "Mean death rate table") %>% 
+  kable_classic(full_width = F, html_font = "Cambria")
+```
+
+From the "Mean death rate" table, we can detect that those people who don't get vaccinated has higher death rate than those people who get vaccinated. For those people who are 65 or elder, they have relatively highest death rate.
+
+***
+
+```{r,echo=FALSE}
+# infection rate
+s_i <- summarize(group_by(infection_total,vaccination.type,vaccine_age),mean(infection_rate))
+s_i %>% 
+  kbl(caption = "Mean infection rate table") %>% 
+  kable_classic(full_width = F, html_font = "Cambria")
+```
+
+From the "Mean infection rate" table, we can detect that those people who don't get vaccinated has obviously higher infection rate than those people who get vaccinated. While, 18-29 and 30-49 have relatively higher infection rate than other age group people in both "vaccinated" and "not vaccinated" group.
+
+***
+
+### Histogram of death rate vs infection rate 
+
+```{r,echo=FALSE}
+death_total$vaccination.type <- as.factor(death_total$vaccination.type)
+death_plot <- ggplot(data = death_total, aes(x = death_rate, fill = death_rate)) + geom_histogram() + ggtitle("Histogram of Death Rate")
+
+infection_total$vaccination.type <- as.factor(infection_total$vaccination.type)
+infection_plot <- ggplot(data = infection_total, aes(x = infection_rate, fill = infection_rate)) + geom_histogram() + ggtitle("Histogram of Infection Rate")
+
+grid.arrange(death_plot,infection_plot,nrow = 1)
+```
+
+From these two plots, we can see that the histogram of death rate is more right-skewed than the histogram of infection rate. 
+
+***
+
+### Box-plot of vaccination_type vs death rate and infection rate
+```{r,echo=FALSE}
+ggplot(data = death_total, aes(x = vaccination.type, y = death_rate, color = vaccination.type)) + geom_boxplot() + ggtitle("Box-plot of Vaccination.type vs Death Rate")
+
+ggplot(data = infection_total, aes(x = vaccination.type, y = infection_rate, color = vaccination.type)) + geom_boxplot() + ggtitle("Box-plot of Vaccination.type vs Infection Rate")
+```
+
+From the box-plot of vaccination type vs death rate, we can clearly detect that death rate of those "not-vaccinated" people is higher than those people who get vaccinated. We also can get the same conclusion in the box-plot of vaccination type vs infection rate.
+
+***
+
+### Box-plot of age_group vs death rate and infection rate
+```{r,echo=FALSE}
+ggplot(data = death_total, aes(x = death_age, y = death_rate, color = death_age)) + geom_boxplot() + ggtitle("Box-plot of Age group vs Death Rate")
+
+ggplot(data = infection_total, aes(x = vaccine_age, y = infection_rate, color = vaccine_age)) + geom_boxplot() + ggtitle("Box-plot of Age group vs Infection rate")
+```
+
+From the box-plot of age group vs death rate, we can detect that the death rate increases when people get older. The death rate is almost equal to zero among people who are less than 30 years old, while it is higher than 0.25 among those people who are older than 80 years old.
+
+From the box-plot of age group vs infection rate, we can detect that those people whose age from 65 to 79 have relatively higher infection rate. But overall we can see that infection rate is equally distributed among 6 age groups. 
+
+***
+
+## Inferential analysis of orginal data
+
+We will fit death rate and infection rate in our two way anova model.
+
+$\ Y_{ijk} = \mu.. + \alpha_i + \beta_j + (\alpha \beta)_{ij} + \epsilon_{ijk}\ $  $\ k = 1,...,n, \ j = 1,...,6, \ i = 1,2$ where ${\epsilon_{ijk}} \ are \ i.i.d \ {N}(0,\sigma^2)$
+
+$\mu_{..}$ is the population mean.
+
+$\alpha_i$ represents the effect of $i-th$ status of vaccination: ($i = 1$ for not vaccinated, $i = 2$ for vaccinated)
+
+$\beta_j$ represents the effect of $j-th$ age group: ($j = 1$ for 12~17; $j = 2$ for 18~29; $j = 3$ for 30~49; $j = 4$ for 50~64; $j = 5$ for 65~79; $j = 6$ for 80 or larger)
+
+$(\alpha \beta)_{ij}$ represents the interaction effect.
+
+$\epsilon_{ijk}$ represents random error.
+
+$\mu_{..} = \sum_{i=1}^{a} \sum_{j=1}^{b}\mu_{ij}/(ab) , \mu_{i.} = \sum_{j=1}^{b}\mu_{ij}/b , \mu_{.j} = \sum_{i=1}^{a}\mu_{ij}/a$
+
+$\alpha_i = \mu_{i.} - \mu_{..} , \beta_j = \mu_{.j} - \mu_{..} , (\alpha \beta)_{ij} = \mu_{ij} - \mu_{i.} - \mu_{.j} + \mu_{..}$
+
+$\sum_{i=1}^{2}\alpha_i  = \sum_{j=1}^{6}\beta_j  = 0$
+
+$\sum_{i=1}^{2} (\alpha \beta)_{ij}$ = $\sum_{j=1}^{6} (\alpha \beta)_{ij} = 0$
+
+***
+
+### Two way Anova model for death rate and infection rate
+```{r,echo=FALSE}
+anova_death <- aov(death_rate~vaccination.type+death_age+vaccination.type*death_age, data = death_total)
+
+anova_infection <- aov(infection_rate~vaccination.type+vaccine_age+vaccination.type*vaccine_age, data = infection_total)
+
+a_d_1 <- tbl_regression(anova_death, exponentiate = TRUE)
+a_i_1 <- tbl_regression(anova_infection, exponentiate = TRUE)
+anova_table_1 <- tbl_merge(tbls = list(a_d_1, a_i_1), tab_spanner = c("**Death Rate**", "**Infection Rate**"))
+anova_table_1
+```
+Let $\alpha = 0.05$.
+
+For the death rate, we can see that those three p-values are all less than significance level, so we can conclude that they are all statistically significant. Moreover, we can determine that vaccination type and age are highly correlated with death rate.
+
+For the infection rate, We can see that those three p-values are all less than significance level, so we can conclude that they are all statistically significant. Moreover, we can determine that vaccination type and age are highly correlated with infection rate.
+
+***
+
+## Sensitivity analysis of original data
+
+***
+
+### Model diagnostics for anova model of death rate
+```{r,echo=FALSE}
+par(mfrow = c(1,2))
+plot(anova_death, which = 1) # plot the residuals against the fitted value
+plot(anova_death, which = 2) # plot the normal-qq plot of the residuals
+```
+
+***
+
+### Model diagnostics for anova model of infection rate
+```{r,echo=FALSE}
+par(mfrow = c(1,2))
+plot(anova_infection, which = 1) # plot the residuals against the fitted value
+plot(anova_infection, which = 2) # plot the normal-qq plot of the residuals
+```
+
+From these two plots of both death rate and infection rate, we can detect that we can't hold equal variance and normality assumption in this case. Therefore we need to transform our original data set to log-transformed data. Let's carry out the box-cox procedure.
+
+***
+
+## Box-cox Transformation
+
+Since the response variable must be positive when we conduct the Box-cox procedure, we have to add 1 in the original death rate.
+
+```{r,echo=FALSE}
+# New death rate
+
+death_rate_1 <- (1000* (death_un$unvaccinated_with_outcome + 1)) / (death_un$unvaccinated_population)
+death_un_1 <- data.frame(death_un,vaccination.type = "not_vaccinated", death_rate_1)
+
+death_rate_1 <- (1000* (death_fu$vaccinated_with_outcome + 1)) / (death_fu$fully_vaccinated_population)
+death_fu_1 <- data.frame(death_fu,vaccination.type = "vaccinated", death_rate_1)
+
+death_total_1 <- rbind(death_un_1[,c("death_age","vaccination.type","death_rate_1")],death_fu_1[,c("death_age","vaccination.type","death_rate_1")])
+
+anova_death_1 <- aov(death_rate_1~vaccination.type+death_age+vaccination.type*death_age, data = death_total_1)
+
+
+boxcox(anova_death_1)
+boxcox(anova_infection)
+```
+
+From the result, we can detect that we should transform our original data set to log-transformed data.
+
+***
+
+# Exploratory analysis for Log-transformed data
+
+***
+
+## Descriptive analysis
+
+At first, we have to apply log transformation to two response variables: death rate and infection rate.
+
+```{r,echo=FALSE}
+# log death rate
+death_total_1$log_death_rate <- log(death_total_1$death_rate_1)
+
+# log infection rate
+infection_total$log_infection_rate <- log(infection_total$infection_rate)
+```
+
+***
+
+### Summary statistics
+```{r,echo=FALSE}
+# death rate
+s_d_1 <- summarize(group_by(death_total_1,vaccination.type,death_age),mean(log_death_rate))
+s_d_1 %>% 
+  kbl(caption = "Mean log death rate table") %>% 
+  kable_classic(full_width = F, html_font = "Cambria")
+
+# infection rate
+s_i_l <- summarize(group_by(infection_total,vaccination.type,vaccine_age),mean(log_infection_rate))
+s_i_l %>% 
+  kbl(caption = "Mean log infection rate table") %>% 
+  kable_classic(full_width = F, html_font = "Cambria")
+```
+
+***
+
+### Histogram of death rate vs infection rate 
+```{r,echo=FALSE}
+death_total_1$vaccination.type <- as.factor(death_total_1$vaccination.type)
+death_plot_1 <- ggplot(data = death_total_1, aes(x = log_death_rate, fill = log_death_rate)) + geom_histogram() + ggtitle("Histogram of LogDeath Rate")
+
+infection_plot_1 <- ggplot(data = infection_total, aes(x = log_infection_rate, fill = log_infection_rate)) + geom_histogram() + ggtitle("Histogram of Log Infection Rate")
+
+grid.arrange(death_plot_1,infection_plot_1,nrow = 1)
+```
+
+As we can see, these two histograms look more normal than initial ones.
+
+***
+
+### Box-plot of vaccination_type vs death rate and infection rate
+```{r,echo=FALSE}
+ggplot(data = death_total_1, aes(x = vaccination.type, y = log_death_rate, color = vaccination.type)) + geom_boxplot() + ggtitle("Box-plot of Vaccination.type vs Log Death Rate")
+
+ggplot(data = infection_total, aes(x = vaccination.type, y = log_infection_rate, color = vaccination.type)) + geom_boxplot() + ggtitle("Box-plot of Vaccination.type vs Log Infection Rate")
+```
+
+From the box-plots of vaccination type versus log death rate and log infection rate, we can make the same conclusion as the initial ones.
+
+***
+
+### Box-plot of age_group vs death rate and infection rate
+```{r,echo=FALSE}
+ggplot(data = death_total_1, aes(x = death_age, y = log_death_rate, color = death_age)) + geom_boxplot() + ggtitle("Box-plot of Age group vs Log Death Rate")
+
+ggplot(data = infection_total, aes(x = vaccine_age, y = log_infection_rate, color = vaccine_age)) + geom_boxplot() + ggtitle("Box-plot of Age group vs Log Infection rate")
+```
+
+From the box-plots of age group versus log death rate and log infection rate, we can make the same conclusion as the initial ones.
+
+***
+
+## Inferential analysis of log-transformed data
+
+We will fit death rate and infection rate in our two way anova model.
+
+$\ Y_{ijk} = \mu.. + \alpha_i + \beta_j + (\alpha \beta)_{ij} + \epsilon_{ijk}\ $  $\ k = 1,...,n, \ j = 1,...,6, \ i = 1,2$ where ${\epsilon_{ijk}} \ are \ i.i.d \ {N}(0,\sigma^2)$
+
+$\mu_{..}$ is the population mean.
+
+$\alpha_i$ represents the effect of $i-th$ status of vaccination: ($i = 1$ for not vaccinated, $i = 2$ for vaccinated)
+
+$\beta_j$ represents the effect of $j-th$ age group: ($j = 1$ for 12~17; $j = 2$ for 18~29; $j = 3$ for 30~49; $j = 4$ for 50~64; $j = 5$ for 65~79; $j = 6$ for 80 or larger)
+
+$(\alpha \beta)_{ij}$ represents the interaction effect.
+
+$\epsilon_{ijk}$ represents random error.
+
+$\alpha_i = \mu_{i.} - \mu_{..} , \beta_j = \mu_{.j} - \mu_{..} , (\alpha \beta)_{ij} = \mu_{ij} - \mu_{i.} - \mu_{.j} + \mu_{..}$
+
+$\sum_{i=1}^{2}\alpha_i  = \sum_{j=1}^{6}\beta_j  = 0$
+
+$\sum_{i=1}^{2} (\alpha \beta)_{ij}$ = $\sum_{j=1}^{6} (\alpha \beta)_{ij} = 0$
+
+***
+
+### Two way Anova model for log-transformed death rate and log-transformed infection rate
+```{r,echo=FALSE}
+anova_death_log <- aov(log_death_rate~vaccination.type+death_age+vaccination.type*death_age, data = death_total_1)
+
+anova_infection_log <- aov(log_infection_rate~vaccination.type+vaccine_age+vaccination.type*vaccine_age, data = infection_total)
+
+a_d_2 <- tbl_regression(anova_death_log, exponentiate = TRUE)
+a_i_2 <- tbl_regression(anova_infection_log, exponentiate = TRUE)
+anova_table_2 <- tbl_merge(tbls = list(a_d_2, a_i_2), tab_spanner = c("**Log Death Rate**", "**Log Infection Rate**"))
+anova_table_2
+
+```
+Let $\alpha = 0.05$
+
+For the log death rate, we can detect that those three p-values are all less than significance level, so we can conclude that they are all statistically significant. Moreover, we can determine that vaccination type and age are highly correlated with death rate.
+
+For the log infection rate, we can detect that the p-value of interaction term is larger than the significance level, so it seems like we can drop the interaction term. 
+
+```{r,echo=FALSE}
+reduced_infection_log <- aov(log_infection_rate~vaccination.type+vaccine_age, data = infection_total)
+anova_table_3 <- tbl_regression(reduced_infection_log, exponentiate = TRUE)
+anova_table_3
+```
+
+Let $\alpha = 0.05$. Since both p-value are lower than the significance level, we can conclude that vaccination type and age are highly correlated with log infection rate.
+
+***
+
+## Sensitivity analysis of log-transformed data
+
+***
+
+### Model diagnostics for anova model of death rate
+```{r,echo=FALSE}
+par(mfrow = c(1,2))
+plot(anova_death_log, which = 1)
+plot(anova_death_log, which = 2)
+```
+
+### Model diagnostics for anova model of infection rate
+```{r,echo=FALSE}
+par(mfrow = c(1,2))
+plot(anova_infection_log, which = 1)
+plot(anova_infection_log, which = 2)
+```
+
+We can detect that both "Residuals vs Fitted value plot" and "Normal Q-Q plot" are much better than the old ones. We believe that those two models hold the normality assumption. 
+
+***
+
+## Test the homogeneity of variance
+
+Let's carry the hypothesis test first:
+
+$H_0: \sigma_i^2 = \sigma_j^2$ for all groups
+
+$H_a: \sigma_i^2 \neq \sigma_j^2$ for at least one pair of groups
+
+***
+
+### Levene Test for death rate
+```{r,echo=FALSE}
+death_total_1$res.abs <- abs(anova_death_log$residuals)
+levene_full_1 <- aov(res.abs~vaccination.type+death_age+vaccination.type*death_age,data = death_total_1)
+levene_reduced_1 <- aov(res.abs~1,data = death_total_1)
+anova(levene_reduced_1,levene_full_1)
+```
+Let $\alpha = 0.05$. Since p-value = 4.177e-05 < 0.05, we reject the null hypothesis. Therefore, we can conclude that $H_a: \sigma_i^2 \neq \sigma_j^2$ for at least one pair of groups.
+
+
+### Levene Test for infection rate
+```{r,echo=FALSE}
+infection_total$res.abs <- abs(reduced_infection_log$residuals)
+levene_full_2 <- aov(res.abs~vaccination.type+vaccine_age,data = infection_total)
+levene_reduced_2 <- aov(res.abs~1,data = infection_total)
+anova(levene_reduced_2,levene_full_2)
+```
+Let $\alpha = 0.05$. Since p-value = 1.542e-08 < 0.05, we reject the null hypothesis. Therefore, we can conclude that $H_a: \sigma_i^2 \neq \sigma_j^2$ for at least one pair of groups.
+
+***
+
+### Causal Inference
+
+Our group figure out that we can't apply causal inference in our data set. Here are the reasons.
+
+The criteria for causal inference are: 
+
+    1. The independent variable must precede the dependent variable in time.
+    2. The two variables are empirically correlated with one another.
+
+In our project, we regard death rate and infection rate as two dependent variables, and vaccination and age group as two independent variables. Within those two independent variables, we only can regard "vaccination" as our treatment effect and it has outcome whether an individual is vaccinated(= 1) or not vaccinated(= 0). While, if we want to make causal inference on vaccination, it will bring out contradiction that our data set only have the new infection cases per week, but it turns out to be that we can't determine if it is their first time to be infected or not. Therefore, we can't assure our accuracy our estimation. 
+
+***
+
+# Discussion
+
+As a result, after conducting several kinds of analysis, we can conclude that age group and vaccination type are two main factors that affect death rate and infection rate. From descriptive analysis part,we can see death rate of those "not-vaccinated" people is higher than those people who get vaccinated. We can also get the same conclusion in the box-plot of vaccination type vs infection rate. Then we conduct two way anova model and we get the same conclusion that vaccination type and age are highly correlated with death rate. Then we use the same methods and make the conclusion that vaccination type and age are highly correlated with infection rate.
+
+Therefore, in a nutshell, getting vaccinated is really essential and vital for you to fight with COVID-19. Besides, those elder people, especially elder than 65, you would be better to concentrate on your personal health and try to avoid going to crowded places because our result shows that elder people have higher risk of getting infected of the COVID-19. Last but not least, I hope CDC or WHO can take measurements of providing more persuasive reasons to let people get vaccinated to lower their chance of getting infected of COVID-19.
+
+***
+
+# Acknowledgement {-}
+
+My topic of the project is advised by my group member Chengyang Zhang.
+
+Professor Chen's class notes: https://nbviewer.org/github/ChenShizhe/StatDataScience/blob/master/Notes/Chapter4ANOVAII.ipynb
+
+Professor Chen's class notes: https://nbviewer.org/github/ChenShizhe/StatDataScience/blob/master/Notes/Chapter4ANOVA.ipynb
+
+gtsummary package tutorial:
+https://www.danieldsjoberg.com/gtsummary/articles/tbl_regression.html
+
+Bartlett’s test for homogeneity of variance:
+https://stattrek.com/anova/homogeneity/bartletts-test.aspx
+
+Criteria for Inferring Causality:
+https://sites.education.miami.edu/statsu/2020/09/22/what-are-the-criteria-for-inferring-causality/
+
+Html Table with kableExtra:
+http://haozhu233.github.io/kableExtra/awesome_table_in_html.html#Overview
+
+# R appendix
+```{r,ref.label=knitr::all_labels(),echo=TRUE,eval=FALSE}
+
+```
+
+```{r}
+sessionInfo()
+```
+
+
